@@ -1,0 +1,9 @@
+{{ if .Values.configmap.enabled }}
+apiVersion: v1
+data:
+    
+kind: ConfigMap
+metadata:
+  name: {{ .Chart.Name }}-env
+  namespace: {{ .Values.metadata.namespace }}
+{{ end }}
