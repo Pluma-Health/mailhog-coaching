@@ -1,0 +1,27 @@
+image:
+  repository: 510467250861.dkr.ecr.eu-central-1.amazonaws.com/percipio-base
+  tag: "<+stage.variables.Dockertag>"
+  pullPolicy: IfNotPresent
+
+# JSON file defining outgoing SMTP servers
+outgoingSMTP:
+  enabled: true
+  existingSecret: ""
+  fileName: outgoing.json
+  fileContents:
+    gmail:
+      name: gmail
+      host: smtp.gmail.com
+      port: '587'
+      email: Hardroc Mailhog <donotreply@rocs.io>
+      username: <+secrets.getValue("org.mailhog-hardroc-gmail-username-<+env.name>")>
+      password: <+secrets.getValue("org.mailhog-hardroc-gmail-password-<+env.name>")>
+      mechanism: PLAIN
+    HardRocSES:
+      name: HardRoc SES (Sandboxed, Verified Emails Only)
+      host: email-smtp.eu-central-1.amazonaws.com
+      port: '25'
+      email: donotreply@rocs.io
+      username: <+secrets.getValue("org.mailhog-hardroc-ses-username-<+env.name>")>
+      password: <+secrets.getValue("org.mailhog-hardroc-ses-password-<+env.name>")>
+      mechanism: PLAIN
