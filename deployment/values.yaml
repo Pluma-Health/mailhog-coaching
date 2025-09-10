@@ -15,7 +15,7 @@ mailhog:
 
 
 image:
-  repository: 510467250861.dkr.ecr.us-east-1.amazonaws.com/mailhog
+  repository: 510467250861.dkr.ecr.us-east-1.amazonaws.com/mailhog-coaching
   tag: "<+stage.variables.Dockertag>"
   pullPolicy: IfNotPresent
 
