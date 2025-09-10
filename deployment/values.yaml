@@ -99,10 +99,9 @@ ingress:
           pathType: Prefix
 
 
-  tls: []
-  #  - secretName: chart-example-tls
-  #    hosts:
-  #      - chart-example.local
+  tls:
+     hosts:
+       - mailhog-coaching.<+stage.variables.Profile>.squads-dev.com
 
 auth:
   enabled: true
