@@ -19,7 +19,7 @@ image:
   tag: "mailhog"
   pullPolicy: IfNotPresent
 
-mailhog_namespace: <+stage.variables.Namespace>
+mailhog_namespace: coaching
 
 
 imagePullSecrets: []
