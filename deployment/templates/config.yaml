@@ -1,0 +1,12 @@
+{{- if and (.Values.outgoingSMTP.enabled) (not .Values.outgoingSMTP.existingSecret) -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+  {{- toYaml .Values.mailhog.labels | nindent 4 }}
+  name: {{ .Values.mailhog.outgoingSMTPSecret }}
+  namespace: {{ .Values.mailhog_namespace }}
+data:
+  {{ .Values.outgoingSMTP.fileName }}: |
+      {{ .Values.outgoingSMTP.fileContents | toJson }}
+{{- end -}}

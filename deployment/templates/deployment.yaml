@@ -1,102 +1,131 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
+  name: {{ .Values.mailhog.fullname }}
   labels:
-    app: {{ .Chart.Name }}
-  name: {{ .Chart.Name }}
-  namespace: {{ .Values.metadata.namespace }}
+  {{- toYaml .Values.mailhog.labels | nindent 4 }}
+  namespace: {{ .Values.mailhog_namespace }}
 spec:
-  replicas: {{ if eq .Values.environment.envState "standby" }}0{{ else }}{{ .Values.replica_count }}{{ end }}
+  replicas: {{ .Values.podReplicas }}
   selector:
     matchLabels:
-      app: {{ .Chart.Name }}
-  strategy:
-    rollingUpdate:
-      maxSurge: {{ .Values.strategy.max_surge }}
-      maxUnavailable: {{ .Values.strategy.max_unavailable }}
-    type: RollingUpdate
+    {{- toYaml .Values.mailhog.selectorLabels | nindent 6 }}
   template:
     metadata:
-      labels:
-        app: {{ .Chart.Name }}
-        sidecar.istio.io/inject: 'true'
+      {{- with .Values.podAnnotations }}
       annotations:
-        {{- range $k, $v := .Values.metadata.annotations }}
-        {{ $k }}: {{ $v | quote }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- toYaml .Values.mailhog.selectorLabels | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
         {{- end }}
-        
     spec:
-      affinity:
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 100
-              podAffinityTerm:
-                labelSelector:
-                  matchLabels:
-                    app: {{ .Chart.Name }}-env
-                topologyKey: kubernetes.io/hostname
-      topologySpreadConstraints:
-        - maxSkew: 1
-          topologyKey: topology.kubernetes.io/zone
-          whenUnsatisfiable: ScheduleAnyway
-          labelSelector:
-            matchLabels:
-              app: {{ .Chart.Name }}-env
+      {{- if .Values.mailhog.serviceAccountName }}
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      {{- end }}
+      automountServiceAccountToken: {{ .Values.automountServiceAccountToken }}
+      {{- with .Values.securityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
-      - envFrom:
-          - configMapRef:
-              name: {{ .Chart.Name }}-env
-        image: {{ .Values.container.image.repository }}/{{ .Chart.Name }}:{{ .Values.container.image.tag }}
-        name: {{ .Chart.Name }}
-        imagePullPolicy: {{ .Values.container.image_pull_policy }}
-        env:
-          - name: OTEL_SERVICE_NAME
-            value: {{ .Chart.Name }}
-          - name: OTEL_RESOURCE_ATTRIBUTES_POD_NAME
-            valueFrom:
-              fieldRef:
-                fieldPath: metadata.name
-          - name: OTEL_RESOURCE_ATTRIBUTES_POD_UID
-            valueFrom:
-              fieldRef:
-                fieldPath: metadata.uid
-          - name: OTEL_TRACES_SAMPLER
-            value: parentbased_traceidratio
-          - name: OTEL_TRACES_SAMPLER_ARG
-            value: "1"
-          - name: OTEL_LOGS_EXPORTER
-            value: none
-          - name: OTEL_EXPORTER_OTLP_PROTOCOL
-            value: grpc
-          - name: OTEL_LOG_LEVEL
-            value: info
-          - name: OTEL_PROPAGATORS
-            value: tracecontext,baggage,b3
-          - name: OTEL_EXPORTER_OTLP_ENDPOINT
-            value: http://otel-lb-collector.observability.svc.cluster.local:4317
-          - name: OTEL_RESOURCE_ATTRIBUTES_NODE_NAME
-            valueFrom:
-              fieldRef:
-                fieldPath: spec.nodeName
-          - name: NODE_OPTIONS
-            value: "--experimental-loader=@opentelemetry/instrumentation/hook.mjs --import ./lib/opentelemetry/instrumentation.mjs"
-        ports:
-        - containerPort: {{ .Values.configmap.PORT }}
-          name: http
-          protocol: TCP
-        resources:
-          limits:
-            memory: {{ .Values.resources.memory.limit }}
-            cpu: {{ .Values.resources.cpu.limit }}
-          requests:
-            memory: {{ .Values.resources.memory.request }}
-            cpu: {{ .Values.resources.cpu.request }}
-        readinessProbe:
-          httpGet:
-            path: {{ .Values.readinessProbe.httpGet.path }}
-            port: {{ .Values.readinessProbe.httpGet.port }}
-        livenessProbe:
-          tcpSocket:
-            port: {{ .Values.livenessProbe.port }}
-          initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
-          timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+        - name: {{ .Values.mailhog.name  }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: "{{ .Values.image.pullPolicy }}"
+          env:
+            {{- $vars := list }}
+            {{- range .Values.extraEnv }}
+            {{- $vars = append $vars .name }}
+            {{- end }}
+            {{- if not (has "MH_HOSTNAME" $vars) }}
+            - name: MH_HOSTNAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            {{- end }}
+            {{- if .Values.auth.enabled }}
+            - name: MH_AUTH_FILE
+              value: /authdir/{{ .Values.auth.fileName }}
+            {{- end }}
+            {{- if .Values.outgoingSMTP.enabled }}
+            - name: MH_OUTGOING_SMTP
+              value: /config/{{ .Values.outgoingSMTP.fileName }}
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          ports:
+            - name: {{ .Values.containerPort.http.name }}
+              containerPort: {{ .Values.containerPort.http.port }}
+              protocol: TCP
+            - name: {{ .Values.containerPort.smtp.name }}
+              containerPort: {{ .Values.containerPort.smtp.port }}
+              protocol: TCP
+          livenessProbe:
+            tcpSocket:
+              port: {{ .Values.containerPort.smtp.port }}
+          {{- if .Values.livenessProbe }}
+          {{- toYaml .Values.livenessProbe | nindent 12 }}
+          {{- end }}
+          readinessProbe:
+            tcpSocket:
+              port: {{ .Values.containerPort.smtp.port }}
+          {{- if .Values.readinessProbe }}
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          {{- end }}
+          {{- if or .Values.auth.enabled .Values.outgoingSMTP.enabled }}
+          volumeMounts:
+            {{- if .Values.auth.enabled }}
+            - name: authdir
+              mountPath: /authdir
+              readOnly: true
+            {{- end }}
+            {{- if .Values.outgoingSMTP.enabled }}
+            - name: outsmtpdir
+              mountPath: /config
+              readOnly: true
+            {{- end }}
+          {{- end }}
+          {{- with .Values.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.extraContainers }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if or .Values.auth.enabled .Values.outgoingSMTP.enabled }}
+      volumes:
+        {{- if .Values.auth.enabled }}
+        - name: authdir
+          secret:
+            secretName: {{ .Values.mailhog.authFileSecret }}
+        {{- end }}
+        {{- if .Values.outgoingSMTP.enabled }}
+        - name: outsmtpdir
+          secret:
+            secretName: {{ .Values.mailhog.outgoingSMTPSecret }}
+        {{- end }}
+      {{- end }}
+      {{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName }}
+      {{- end }}

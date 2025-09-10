@@ -1,69 +1,185 @@
-# All of the following are populated by Harness during deployment. These are
-# temporary measures until IACv2 implements pod identities.
-# https://docs.aws.amazon.com/eks/latest/userguide/pod-identities.html
-environment:
- awsAccountId: "<+serviceVariables.awsAccountId>"
- name: "<+env.name>"
- oidcProvider: "<+serviceVariables.oidcProvider>"
- region: "<+pipeline.variables.region>"
- envState: "<+stage.variables.EnvState>"
-
-metadata:
+mailhog:
+  name: mailhog
+  fullname: mailhog
   labels:
-    app: mailhog-coaching
-  namespace: coaching
-  annotations:
-    repo: "https://github.com/Pluma-Health/mailhog-coaching"
-    squad: "Pluma-Health"
-    jiraKey: "PLUMA"
-
-replica_count: 1
-
-strategy:
-  max_surge: 1
-  max_unavailable: 1
-
-container:
-  image_pull_policy: IfNotPresent
-  image:
-    repository: 510467250861.dkr.ecr.us-east-1.amazonaws.com
-    tag: <+stage.variables.Dockertag>
-
-resources:
-  cpu:
-    limit: 500m
-    request: 150m
-  memory:
-    limit: 512Mi
-    request: 128Mi
+    helm.sh/chart: mailhog-5.2.3
+    app.kubernetes.io/name: mailhog
+    app.kubernetes.io/instance: mailhog
+    app.kubernetes.io/version: "mailhog"
+    app.kubernetes.io/managed-by: Helm
+  selectorLabels:
+    app.kubernetes.io/name: mailhog
+    app.kubernetes.io/instance: release-name
+  authFileSecret: coaching-mailhog-auth
+  outgoingSMTPSecret: coaching-mailhog-outgoing-smtp
 
 
-configmap:
+image:
+  repository: 510467250861.dkr.ecr.us-east-1.amazonaws.com/percipio-base
+  tag: "mailhog"
+  pullPolicy: IfNotPresent
+
+mailhog_namespace: <+stage.variables.Namespace>
+
+
+imagePullSecrets: []
+
+extraContainers: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+containerPort:
+  http:
+    name: http
+    port: 8025
+  smtp:
+    name: tcp-smtp
+    port: 1025
+
+serviceAccount:
+  # Specifies whether a ServiceAccount should be created
+  create: false
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+  # Image pull secrets that are attached to the ServiceAccount
+  imagePullSecrets: []
+
+automountServiceAccountToken: false
+
+service:
+  annotations: {}
+  clusterIP: ""
+  externalIPs: []
+  loadBalancerIP: ""
+  loadBalancerSourceRanges: []
+  type: ClusterIP
+  # Named target ports are not supported by GCE health checks, so when deploying on GKE
+  # and exposing it via GCE ingress, the health checks fail and the load balancer returns a 502.
+  namedTargetPort: true
+  port:
+    http: 8025
+    smtp: 25
+  nodePort:
+    http: ""
+    smtp: ""
+  extraPorts:
+    - name: smtp-legacy
+      protocol: TCP
+      port: 1025
+      targetPort: smtp
+
+securityContext:
+  runAsUser: 1000
+  runAsGroup: 1000
+  runAsNonRoot: true
+  fsGroup: 1000
+
+containerSecurityContext:
+  readOnlyRootFilesystem: true
+  privileged: false
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+
+ingress:
   enabled: true
-  PORT: '8080'
-  HOST: '0.0.0.0'
-  env: 'production'
+  ingressClassName: restricted-nginx
+  annotations:
+    # kubernetes.io/ingress.class: restricted-nginx
+    # kubernetes.io/ingress.class: nginx
+    # kubernetes.io/tls-acme: "true"
+  labels: {}
+  hosts:
+    - host: mailhog-coaching.<+stage.variables.Profile>.squads-dev.com
+      paths:
+        - path: "/"
+          pathType: Prefix
 
-readinessProbe:
-  httpGet:
-    path: '/public/health/v1/ping'
-    port: 8080
+
+  tls: []
+  #  - secretName: chart-example-tls
+  #    hosts:
+  #      - chart-example.local
+
+auth:
+  enabled: true
+  existingSecret: ""
+  fileName: auth.txt
+  fileContents: ping:<+secrets.getValue("org.pluma-services-mailhog-password-<+env.name>")>
+
+# JSON file defining outgoing SMTP servers
+outgoingSMTP:
+  enabled: true
+  existingSecret: ""
+  fileName: outgoing.json
+  fileContents:
+    # See https://github.com/mailhog/MailHog/blob/master/docs/CONFIG.md#outgoing-smtp-configuration
+    # Only name, host and port are required.
+    #
+    # server_name1:
+    #   name: "server_name1"
+    #   host: "mail.example.com"
+    #   port: "25"    # NOTE: go requires this port number to be a string... otherwise the container won't start
+    #   email: ""
+    #   username: ""
+    #  password: ""
+    #  mechanism: "PLAIN|CRAM-MD5"
+    # server_name2:
+    #   name: "server_name2"
+    #   host: "mail2.example.com"
+    #   port: "587"   # NOTE: go requires this port number to be a string... otherwise the container won't start
+
+    gmail:
+      name: gmail
+      host: smtp.gmail.com
+      port: '587'
+      email: Hardroc Mailhog <donotreply@rocs.io>
+      username: <+secrets.getValue("org.mailhog-hardroc-gmail-username-<+env.name>")>
+      password: <+secrets.getValue("org.mailhog-hardroc-gmail-password-<+env.name>")>
+      mechanism: PLAIN
+    HardRocSES:
+      name: HardRoc SES (Sandboxed, Verified Emails Only)
+      host: email-smtp.us-east-1.amazonaws.com
+      port: '25'
+      email: donotreply@rocs.io
+      username: <+secrets.getValue("org.mailhog-hardroc-ses-username-<+env.name>")>
+      password: <+secrets.getValue("org.mailhog-hardroc-ses-password-<+env.name>")>
+      mechanism: PLAIN
+
+podReplicas: 1
+
+podAnnotations: {}
+podLabels: {}
+
+extraEnv: []
+
+# ref: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#configure-probes
 livenessProbe:
-  port: 8080
-  initialDelaySeconds: 5
+  initialDelaySeconds: 10
   timeoutSeconds: 1
 
+readinessProbe: {}
 
+resources: {}
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
 
-peerauthentication:
-  enabled: true
+affinity: {}
 
-verticalpodautoscaler:
-  enabled: true
+nodeSelector: {}
 
-virtualservice_internal:
-  enabled: false
+tolerations: []
 
+priorityClassName:
 
-
-  
