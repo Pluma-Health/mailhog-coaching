@@ -99,9 +99,9 @@ ingress:
           pathType: Prefix
 
 
-  tls:
-     hosts:
-       - mailhog-coaching.<+stage.variables.Profile>.squads-dev.com
+  tls: {}
+     # hosts:
+     #   - mailhog-coaching.<+stage.variables.Profile>.squads-dev.com
 
 auth:
   enabled: true
