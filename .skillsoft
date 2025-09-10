@@ -1,0 +1,13 @@
+#DOCUMENTATION: https://skillsoftdev.atlassian.net/wiki/x/AYB-y
+harnessServiceName: mailhog-coaching
+includeCDTests: [UI,BFF,BE]
+podAnnotations:
+  jiraKey: PLUMA
+  repo: https://github.skillsoft.com/Pluma-Health/mailhog-coaching
+  squad: PLUMA
+runCDTests: false
+slackNotificationChannel: PLUMA-squad
+deploymentHealthAuthType: basic
+# Attention!  You must request this secret and make your service accept the credentials. JWT is also supported.
+deploymentHealthUsername: mailhog-coaching-username-<+env.name>
+deploymentHealthPassword: mailhog-coaching-password-<+env.name>
