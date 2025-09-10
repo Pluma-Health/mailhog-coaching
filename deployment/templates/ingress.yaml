@@ -27,6 +27,11 @@ spec:
       {{- end }}
   {{- end }}
 {{- end }}
+  tls:
+  {{- range .Values.ingress.hosts }}
+  - hosts:
+    - {{ .host | quote }}
+  {{- end }}
   rules:
   {{- range .Values.ingress.hosts }}
     - host: {{ .host | quote }}
