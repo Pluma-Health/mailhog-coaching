@@ -16,7 +16,7 @@ mailhog:
 
 image:
   repository: 510467250861.dkr.ecr.us-east-1.amazonaws.com/percipio-base
-  tag: "mailhog"
+  tag: "<+stage.variables.Dockertag>"
   pullPolicy: IfNotPresent
 
 mailhog_namespace: coaching
