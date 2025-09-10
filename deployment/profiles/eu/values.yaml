@@ -1,0 +1,5 @@
+container:
+  image:
+    repository: 510467250861.dkr.ecr.eu-central-1.amazonaws.com
+    tag: <+stage.variables.Dockertag>
+
